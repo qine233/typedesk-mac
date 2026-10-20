@@ -105,6 +105,14 @@ struct RootView: View {
                                badge: state.pendingComments)
                         .tag(Pane.comments)
                 }
+                Section("站点数据") {
+                    SidebarRow("heart.text.square", Theme.statusPublish, "健康记录",
+                               count: state.healthData?.count)
+                        .tag(Pane.health)
+                    SidebarRow("cart", Theme.headingMarker, "买菜记账",
+                               count: state.billsData?.count)
+                        .tag(Pane.bills)
+                }
             }
             .listStyle(.sidebar)
 
@@ -144,6 +152,10 @@ struct RootView: View {
             MetaListView(kind: .categories)
         case .tags:
             MetaListView(kind: .tags)
+        case .health:
+            HealthMiddleListView()
+        case .bills:
+            BillsMiddleListView()
         }
     }
 
@@ -281,6 +293,10 @@ struct RootView: View {
                     .id("note-\(note.path)")
                     .environmentObject(state)
                     .environmentObject(notes)
+            } else if pane == .health {
+                HealthDetailView().environmentObject(state)
+            } else if pane == .bills {
+                BillsDetailView().environmentObject(state)
             } else {
                 placeholder
             }

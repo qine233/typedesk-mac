@@ -33,6 +33,29 @@ struct SettingsView: View {
                         .textFieldStyle(.roundedBorder).frame(width: 280)
                         .onSubmit { state.saveCredentials() }
                 }
+                GridRow {
+                    Text("站点数据密钥").font(.system(size: 12)).foregroundColor(Theme.textSecondary)
+                    SecureField("NolineApi 插件密钥", text: $state.siteKey)
+                        .textFieldStyle(.roundedBorder).frame(width: 280)
+                        .onSubmit { state.saveCredentials() }
+                }
+            }
+
+            HStack(spacing: 6) {
+                Image(systemName: "lock.shield").font(.system(size: 10)).foregroundColor(Theme.statusPublish)
+                Text("账号密码与站点密钥都只存在系统钥匙串；密钥通过 X-Noline-Key 请求头发送，不进日志。健康记录 / 买菜记账需要此密钥（Typecho 后台 → NolineApi 插件设置）。")
+                    .font(.system(size: 10)).foregroundColor(Theme.textLight)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.top, 8)
+
+            if state.siteURL.hasPrefix("http://") {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle").font(.system(size: 10)).foregroundColor(Theme.statusDraft)
+                    Text("站点走的是明文 HTTP，密钥会以明文传输，建议先上 HTTPS 再启用写入。")
+                        .font(.system(size: 10)).foregroundColor(Theme.statusDraft)
+                }
+                .padding(.top, 6)
             }
 
             HStack(spacing: 10) {

@@ -13,13 +13,37 @@ final class NoteStore: ObservableObject {
     @Published var notes: [Note] = []
 
     private let dir: URL
+    private let mapURL: URL
+    private var cidMap: [String: Int] = [:]
 
     init() {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("InkDesk/Notes", isDirectory: true)
         dir = base
+        mapURL = base.deletingLastPathComponent().appendingPathComponent("syncmap.json")
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        if let data = try? Data(contentsOf: mapURL),
+           let map = try? JSONDecoder().decode([String: Int].self, from: data) {
+            cidMap = map
+        }
         reload()
+    }
+
+    /// 本地笔记 ↔ 站点草稿 cid 的映射（自动同步用）
+    func remoteCid(for path: String) -> Int { cidMap[path] ?? 0 }
+
+    func setRemoteCid(_ path: String, _ cid: Int) {
+        cidMap[path] = cid
+        if let data = try? JSONEncoder().encode(cidMap) {
+            try? data.write(to: mapURL)
+        }
+    }
+
+    func clearRemoteCid(_ path: String) {
+        cidMap.removeValue(forKey: path)
+        if let data = try? JSONEncoder().encode(cidMap) {
+            try? data.write(to: mapURL)
+        }
     }
 
     func reload() {
@@ -55,6 +79,7 @@ final class NoteStore: ObservableObject {
 
     func delete(_ note: Note) {
         try? FileManager.default.removeItem(atPath: note.path)
+        clearRemoteCid(note.path)
         reload()
     }
 

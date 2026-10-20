@@ -165,7 +165,7 @@ struct TypechoAPI {
         let s = r.structValue ?? [:]
         return TSPage(cid: s["page_id"]?.intValue ?? cid,
                       title: s["title"]?.stringValue ?? "",
-                      content: s["description"]?.stringValue ?? "",
+                      content: HTMLToMarkdown.convert(s["description"]?.stringValue ?? ""),
                       created: s["dateCreated"]?.dateValue ?? Date())
     }
 
@@ -230,7 +230,7 @@ struct TypechoAPI {
         TSPost(
             cid: s["postid"]?.intValue ?? 0,
             title: s["title"]?.stringValue ?? "",
-            content: s["description"]?.stringValue ?? "",
+            content: HTMLToMarkdown.convert(s["description"]?.stringValue ?? ""),
             categories: s["categories"]?.arrayValue?.compactMap { $0.stringValue } ?? [],
             tags: (s["mt_keywords"]?.stringValue ?? "")
                 .split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty },
