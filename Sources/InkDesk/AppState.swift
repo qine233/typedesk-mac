@@ -1,5 +1,22 @@
 import SwiftUI
 
+enum DocFilter: String, CaseIterable, Identifiable {
+    case all = "全部"
+    case draft = "草稿"
+    case published = "已发布"
+
+    var id: String { rawValue }
+}
+
+enum Pane: Hashable {
+    case notes
+    case posts(DocFilter)
+    case categories
+    case tags
+    case pages
+    case comments
+}
+
 @MainActor
 final class AppState: ObservableObject {
     static let shared = AppState()
@@ -13,8 +30,12 @@ final class AppState: ObservableObject {
     @Published var posts: [TSPost] = []
     @Published var categories: [TSCategory] = []
     @Published var tags: [TSTag] = []
+    @Published var pages: [TSPage] = []
+    @Published var comments: [TSComment] = []
     @Published var loading = false
     @Published var lastError: String?
+
+    var pendingComments: Int { comments.filter { $0.status == "pending" }.count }
 
     func saveCredentials() {
         Keychain.set(password, for: "typecho.password")
@@ -38,6 +59,8 @@ final class AppState: ObservableObject {
             posts = try await api.getRecentPosts(50)
             categories = try await api.getCategories()
             tags = try await api.getTags()
+            pages = (try? await api.getPages()) ?? []
+            comments = (try? await api.getComments(40)) ?? []
             lastError = nil
         } catch {
             connected = false
@@ -54,7 +77,6 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// 返回发布后的 cid；publish=false 存为草稿
     func publish(_ post: TSPost, publish: Bool) async -> Int? {
         guard var api else {
             lastError = RPCError.notConfigured.localizedDescription
@@ -64,12 +86,9 @@ final class AppState: ObservableObject {
         defer { loading = false }
         do {
             let cid = try await api.publish(post, asPublish: publish)
-            // 草稿在 Typecho 中是独立记录，编辑草稿即另存；直接刷新列表即可
             posts = try await api.getRecentPosts(50)
-            if !categories.isEmpty || !tags.isEmpty {
-                categories = try await api.getCategories()
-                tags = try await api.getTags()
-            }
+            categories = try await api.getCategories()
+            tags = try await api.getTags()
             lastError = nil
             return cid == 0 ? post.cid : cid
         } catch {
@@ -87,20 +106,68 @@ final class AppState: ObservableObject {
             lastError = error.localizedDescription
         }
     }
-}
 
-enum SidebarSection: String, CaseIterable, Identifiable {
-    case notes = "本地笔记"
-    case posts = "网站文章"
-    case meta = "分类与标签"
+    // 页面
+    func loadPage(_ cid: Int) async -> TSPage? {
+        guard let api else { return nil }
+        do { return try await api.getPage(cid) }
+        catch { lastError = error.localizedDescription; return nil }
+    }
 
-    var id: String { rawValue }
+    func savePage(_ page: TSPage) async -> Int? {
+        guard let api else { return nil }
+        do {
+            let cid: Int
+            if page.cid > 0 {
+                try await api.updatePage(page)
+                cid = page.cid
+            } else {
+                cid = try await api.createPage(page)
+            }
+            pages = try await api.getPages()
+            return cid
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
 
-    var symbol: String {
-        switch self {
-        case .notes: return "note.text"
-        case .posts: return "doc.text"
-        case .meta: return "tag"
+    func deletePage(_ page: TSPage) async {
+        guard let api else { return }
+        do {
+            try await api.deletePage(page.cid)
+            pages.removeAll { $0.cid == page.cid }
+        } catch { lastError = error.localizedDescription }
+    }
+
+    // 评论
+    func setComment(_ comment: TSComment, status: String) async {
+        guard let api else { return }
+        do {
+            try await api.setCommentStatus(comment, status: status)
+            if let i = comments.firstIndex(where: { $0.coid == comment.coid }) {
+                comments[i].status = status
+            }
+        } catch { lastError = error.localizedDescription }
+    }
+
+    func deleteComment(_ comment: TSComment) async {
+        guard let api else { return }
+        do {
+            try await api.deleteComment(comment)
+            comments.removeAll { $0.coid == comment.coid }
+        } catch { lastError = error.localizedDescription }
+    }
+
+    // 上传
+    func uploadImage(name: String, type: String, data: Data) async -> String? {
+        guard let api else { return nil }
+        do {
+            let url = try await api.uploadMedia(name: name, type: type, data: data)
+            return url.isEmpty ? nil : url
+        } catch {
+            lastError = "图片上传失败：" + error.localizedDescription
+            return nil
         }
     }
 }

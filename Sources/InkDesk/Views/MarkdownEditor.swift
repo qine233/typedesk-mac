@@ -1,8 +1,18 @@
 import SwiftUI
 import AppKit
 
+final class EditorBridge {
+    weak var textView: NSTextView?
+    func insert(_ s: String) {
+        if let tv = textView {
+            tv.insertText(s, replacementRange: tv.selectedRange())
+        }
+    }
+}
+
 struct MarkdownEditor: NSViewRepresentable {
     @Binding var text: String
+    var bridge: EditorBridge? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -31,6 +41,7 @@ struct MarkdownEditor: NSViewRepresentable {
         tv.autoresizingMask = [.width]
         scroll.documentView = tv
         context.coordinator.textView = tv
+        bridge?.textView = tv
         return scroll
     }
 

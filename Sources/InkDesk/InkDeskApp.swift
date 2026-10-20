@@ -7,7 +7,7 @@ struct InkDeskApp: App {
 
     var body: some Scene {
         WindowGroup("墨桌 InkDesk") {
-            ContentView()
+            RootView()
                 .environmentObject(state)
                 .environmentObject(noteStore)
                 .frame(minWidth: 860, minHeight: 560)

@@ -35,6 +35,27 @@ struct TSTag: Identifiable, Equatable, Hashable {
     var id: Int { mid }
 }
 
+struct TSPage: Identifiable, Equatable {
+    var cid: Int
+    var title: String
+    var content: String
+    var created: Date
+    var id: Int { cid }
+}
+
+struct TSComment: Identifiable, Equatable {
+    var coid: Int
+    var author: String
+    var email: String
+    var url: String
+    var content: String
+    var status: String      // approved / pending / spam
+    var created: Date
+    var postId: Int
+    var postTitle: String
+    var id: Int { coid }
+}
+
 enum TSStatus {
     static let published = "publish"
     static let draft = "draft"
@@ -124,6 +145,85 @@ struct TypechoAPI {
                          slug: s["slug"]?.stringValue ?? "",
                          count: s["count"]?.intValue ?? 0)
         } ?? []
+    }
+
+    // MARK: - 页面
+
+    func getPages() async throws -> [TSPage] {
+        let r = try await client.call("wp.getPageList", [.int(client.blogId)] + auth)
+        return r.arrayValue?.compactMap { v in
+            guard let s = v.structValue else { return nil }
+            return TSPage(cid: s["page_id"]?.intValue ?? 0,
+                          title: s["page_title"]?.stringValue ?? "",
+                          content: "",
+                          created: s["dateCreated"]?.dateValue ?? Date())
+        } ?? []
+    }
+
+    func getPage(_ cid: Int) async throws -> TSPage {
+        let r = try await client.call("wp.getPage", [.int(client.blogId), .int(cid)] + auth)
+        let s = r.structValue ?? [:]
+        return TSPage(cid: s["page_id"]?.intValue ?? cid,
+                      title: s["title"]?.stringValue ?? "",
+                      content: s["description"]?.stringValue ?? "",
+                      created: s["dateCreated"]?.dateValue ?? Date())
+    }
+
+    func createPage(_ page: TSPage) async throws -> Int {
+        let struct_: [String: RPCValue] = ["title": .string(page.title), "description": .string(page.content)]
+        let r = try await client.call("wp.newPage", [.int(client.blogId)] + auth + [.struct_(struct_), .bool(true)])
+        return r.intValue ?? 0
+    }
+
+    func updatePage(_ page: TSPage) async throws {
+        let struct_: [String: RPCValue] = ["title": .string(page.title), "description": .string(page.content)]
+        _ = try await client.call("wp.editPage",
+                                  [.int(client.blogId), .int(page.cid)] + auth + [.struct_(struct_), .bool(true)])
+    }
+
+    func deletePage(_ cid: Int) async throws {
+        _ = try await client.call("wp.deletePage", [.int(client.blogId), .string(username), .string(password), .int(cid)])
+    }
+
+    // MARK: - 评论
+
+    func getComments(_ num: Int = 30) async throws -> [TSComment] {
+        let r = try await client.call("wp.getComments",
+                                      [.int(client.blogId)] + auth + [.struct_(["number": .int(num)])])
+        return r.arrayValue?.compactMap { v in
+            guard let s = v.structValue else { return nil }
+            return TSComment(coid: s["comment_id"]?.intValue ?? 0,
+                             author: s["author"]?.stringValue ?? "",
+                             email: s["author_email"]?.stringValue ?? "",
+                             url: s["author_url"]?.stringValue ?? "",
+                             content: s["content"]?.stringValue ?? "",
+                             status: s["status"]?.stringValue ?? "approved",
+                             created: s["date_created_gmt"]?.dateValue ?? Date(),
+                             postId: s["post_id"]?.intValue ?? 0,
+                             postTitle: s["post_title"]?.stringValue ?? "")
+        } ?? []
+    }
+
+    func setCommentStatus(_ comment: TSComment, status: String) async throws {
+        _ = try await client.call("wp.editComment",
+                                  [.int(client.blogId)] + auth + [.int(comment.coid),
+                                                                   .struct_(["status": .string(status)])])
+    }
+
+    func deleteComment(_ comment: TSComment) async throws {
+        _ = try await client.call("wp.deleteComment", [.int(client.blogId)] + auth + [.int(comment.coid)])
+    }
+
+    // MARK: - 上传
+
+    func uploadMedia(name: String, type: String, data: Data) async throws -> String {
+        let struct_: [String: RPCValue] = [
+            "name": .string(name),
+            "type": .string(type),
+            "bits": .base64(data),
+        ]
+        let r = try await client.call("mt.newMediaObject", [.int(client.blogId)] + auth + [.struct_(struct_)])
+        return r["url"]?.stringValue ?? ""
     }
 
     static func parsePost(_ s: [String: RPCValue]) -> TSPost {
