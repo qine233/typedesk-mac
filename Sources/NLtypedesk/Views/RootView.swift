@@ -73,7 +73,7 @@ struct RootView: View {
                     .overlay(Image(systemName: "square.and.pencil")
                         .font(.system(size: 11, weight: .bold)).foregroundColor(.white))
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("墨桌").font(.system(size: 13, weight: .bold)).foregroundColor(Theme.textStrong)
+                    Text("NLtypedesk").font(.system(size: 13, weight: .bold)).foregroundColor(Theme.textStrong)
                     Text(state.connected ? state.blogName : "未连接网站")
                         .font(.system(size: 10)).foregroundColor(Theme.textLight).lineLimit(1)
                 }

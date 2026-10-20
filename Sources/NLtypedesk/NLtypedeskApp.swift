@@ -1,12 +1,12 @@
 import SwiftUI
 
 @main
-struct InkDeskApp: App {
+struct NLtypedeskApp: App {
     @StateObject private var state = AppState.shared
     @StateObject private var noteStore = NoteStore()
 
     var body: some Scene {
-        WindowGroup("墨桌 InkDesk") {
+        WindowGroup("NLtypedesk") {
             RootView()
                 .environmentObject(state)
                 .environmentObject(noteStore)

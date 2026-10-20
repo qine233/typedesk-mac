@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "InkDesk",
+    name: "NLtypedesk",
     platforms: [.macOS(.v13)],
     targets: [
         .executableTarget(
-            name: "InkDesk",
-            path: "Sources/InkDesk",
+            name: "NLtypedesk",
+            path: "Sources/NLtypedesk",
             swiftSettings: [.swiftLanguageMode(.v5)]
         )
     ]

@@ -58,7 +58,7 @@ private struct KeyMissing: View {
     var body: some View {
         VStack(spacing: 0) {
             EmptyStateView(title: "还没配置站点密钥",
-                           subtitle: "Typecho 后台 → NolineApi 插件设置\n把密钥填入 墨桌设置 → 站点数据密钥")
+                           subtitle: "Typecho 后台 → NolineApi 插件设置\n把密钥填入 NLtypedesk 设置 → 站点数据密钥")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.bg)
