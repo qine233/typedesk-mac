@@ -57,6 +57,10 @@ struct RootView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .sheet(isPresented: $showSettings) { SettingsView() }
+        .sheet(isPresented: $state.searchPresented) {
+            SearchPalette().environmentObject(state).environmentObject(notes)
+                .background(Theme.bg)
+        }
         .task { if !state.connected { await state.refresh() } }
         .onChange(of: state.newNoteTick) { _ in
             selectedNote = notes.create()
@@ -64,6 +68,40 @@ struct RootView: View {
             editingPage = nil
         }
         .onChange(of: state.newPostTick) { _ in startNewPost() }
+        .onChange(of: state.pane) { p in
+            if case .posts = p {} else { state.metaFilter = nil }
+        }
+        .onChange(of: state.openNotePath) { path in
+            guard let path else { return }
+            state.openNotePath = nil
+            selectedNote = notes.notes.first { $0.path == path } ?? selectedNote
+            editingPost = nil
+            editingPage = nil
+        }
+        .onChange(of: state.openPostCid) { cid in
+            guard let cid else { return }
+            state.openPostCid = nil
+            openPost(cid)
+        }
+        .onChange(of: state.openPageCid) { cid in
+            guard let cid else { return }
+            state.openPageCid = nil
+            selectedNote = nil
+            editingPost = nil
+            if let page = state.pages.first(where: { $0.cid == cid }) {
+                Task { editingPage = await state.loadPage(cid) ?? page }
+            }
+        }
+    }
+
+    private func openPost(_ cid: Int) {
+        selectedNote = nil
+        editingPage = nil
+        if let post = state.posts.first(where: { $0.cid == cid }) {
+            Task { editingPost = await state.loadPost(cid) ?? post }
+        } else {
+            Task { editingPost = await state.loadPost(cid) }
+        }
     }
 
     private func startNewPost() {
@@ -92,7 +130,10 @@ struct RootView: View {
                 }
                 Spacer()
             }
-            .padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 10)
+            .padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 8)
+
+            SidebarSearchField { state.searchPresented = true }
+                .padding(.horizontal, 12).padding(.bottom, 8)
 
             List(selection: $state.pane) {
                 Section("写作") {
@@ -213,18 +254,37 @@ struct RootView: View {
             .padding(.horizontal, 10).padding(.bottom, 8)
             .fixedSize()
 
-            if state.posts.isEmpty && !state.loading {
+            if let m = state.metaFilter {
+                HStack(spacing: 6) {
+                    Image(systemName: "line.3.horizontal.decrease.circle.fill")
+                        .font(.system(size: 11)).foregroundColor(Theme.accent)
+                    Text(m.label).font(.system(size: 11, weight: .medium)).foregroundColor(Theme.accent)
+                    Spacer()
+                    Button {
+                        state.metaFilter = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill").font(.system(size: 11))
+                            .foregroundColor(Theme.textLight)
+                    }.buttonStyle(.plain)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 7)
+                .background(Theme.accentBg)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .padding(.horizontal, 10).padding(.bottom, 8)
+            }
+
+            let visible = filteredPosts(f)
+            if visible.isEmpty && !state.loading && state.metaFilter != nil {
+                EmptyStateView(title: "这里还没有文章",
+                               subtitle: "「\(state.metaFilter?.label ?? "")」下没有内容\n点筛选条右侧的 × 取消筛选")
+            } else if state.posts.isEmpty && !state.loading {
                 EmptyStateView(title: "还没有文章", subtitle: "在设置中连接网站后自动同步\n点击左上角刷新按钮重试")
             } else {
                 ScrollView {
                     LazyVStack(spacing: 6) {
-                        ForEach(filteredPosts(f)) { post in
+                        ForEach(visible) { post in
                             PostRow(post: post, active: editingPost?.cid == post.cid && post.cid != 0)
-                                .onTapGesture {
-                                    selectedNote = nil
-                                    editingPage = nil
-                                    Task { editingPost = await state.loadPost(post.cid) ?? post }
-                                }
+                                .onTapGesture { openPost(post.cid) }
                         }
                     }
                     .padding(.horizontal, 10).padding(.bottom, 14)
@@ -264,11 +324,19 @@ struct RootView: View {
     }
 
     private func filteredPosts(_ f: DocFilter) -> [TSPost] {
+        var list: [TSPost]
         switch f {
-        case .all: return state.posts
-        case .draft: return state.posts.filter { $0.status != TSStatus.published }
-        case .published: return state.posts.filter { $0.status == TSStatus.published }
+        case .all: list = state.posts
+        case .draft: list = state.posts.filter { $0.status != TSStatus.published }
+        case .published: list = state.posts.filter { $0.status == TSStatus.published }
         }
+        if let m = state.metaFilter {
+            switch m {
+            case .category(let name): list = list.filter { $0.categories.contains(name) }
+            case .tag(let name): list = list.filter { $0.tags.contains(name) }
+            }
+        }
+        return list
     }
 
     private func paneButton(_ title: String, _ icon: String) -> some View {
@@ -317,7 +385,7 @@ struct RootView: View {
             EmptyInkIllustration()
             Text("从左侧选择内容开始写作")
                 .font(.system(size: 14, weight: .medium)).foregroundColor(Theme.textMain)
-            Text("面板 ⌘1–8 · 新笔记 ⌘N · 新文章 ⌘⇧N · 保存 ⌘S")
+            Text("搜索 ⌘K · 面板 ⌘1–8 · 新笔记 ⌘N · 新文章 ⌘⇧N · 保存 ⌘S")
                 .font(.system(size: 11)).foregroundColor(Theme.textLight)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -325,8 +393,39 @@ struct RootView: View {
     }
 }
 
-struct PaneHeader: View {
-    let title: String
+/// 侧栏顶部的搜索入口（点了打开 ⌘K 面板）
+struct SidebarSearchField: View {
+    let action: () -> Void
+    @State private var hover = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(hover ? Theme.accent : Theme.textLight)
+                Text("搜索").font(.system(size: 12)).foregroundColor(Theme.textLight)
+                Spacer()
+                Text("⌘K")
+                    .font(.system(size: 10, weight: .semibold)).foregroundColor(Theme.textLight)
+                    .padding(.horizontal, 5).padding(.vertical, 1)
+                    .background(Theme.surfaceSoft)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+            }
+            .padding(.horizontal, 9).padding(.vertical, 6)
+            .background(hover ? Theme.surfaceSoft : Theme.card)
+            .overlay(RoundedRectangle(cornerRadius: 7)
+                .stroke(hover ? Theme.accent.opacity(0.4) : Theme.cardBorder, lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+        .animation(.easeOut(duration: 0.13), value: hover)
+    }
+}
+
+struct PaneHeader: View {    let title: String
     var trailing: AnyView?
     init(_ title: String, @ViewBuilder trailing: () -> some View = { EmptyView() }) {
         self.title = title

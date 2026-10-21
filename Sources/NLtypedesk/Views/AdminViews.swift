@@ -99,34 +99,30 @@ struct MetaListView: View {
     var body: some View {
         VStack(spacing: 0) {
             PaneHeader(kind == .categories ? "分类" : "标签") { EmptyView() }
+            Text("点一行可以在文章列表里按它筛选")
+                .font(.system(size: 10)).foregroundColor(Theme.textLight)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12).padding(.bottom, 8)
             ScrollView {
                 LazyVStack(spacing: 6) {
                     if kind == .categories {
                         ForEach(state.categories) { cat in
-                            HStack {
-                                Image(systemName: "folder.fill").foregroundColor(Theme.info).font(.system(size: 11))
-                                Text(cat.name).font(.system(size: 13)).foregroundColor(Theme.textMain)
-                                Spacer()
-                                Text("\(state.posts.filter { $0.categories.contains(cat.name) }.count) 篇")
-                                    .font(.system(size: 11)).foregroundColor(Theme.textLight)
+                            MetaRow(icon: "folder.fill", color: Theme.info, name: cat.name,
+                                    count: state.posts.filter { $0.categories.contains(cat.name) }.count,
+                                    unit: "篇",
+                                    active: state.metaFilter == .category(cat.name)) {
+                                state.metaFilter = .category(cat.name)
+                                state.pane = .posts(DocFilter.all)
                             }
-                            .padding(10)
-                            .background(Theme.card)
-                            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMd))
-                            .overlay(RoundedRectangle(cornerRadius: Theme.radiusMd).stroke(Theme.cardBorder, lineWidth: 1))
                         }
                     } else {
                         ForEach(state.tags) { tag in
-                            HStack {
-                                Image(systemName: "tag.fill").foregroundColor(Theme.statusDraft).font(.system(size: 11))
-                                Text(tag.name).font(.system(size: 13)).foregroundColor(Theme.textMain)
-                                Spacer()
-                                Text("\(tag.count)").font(.system(size: 11)).foregroundColor(Theme.textLight)
+                            MetaRow(icon: "tag.fill", color: Theme.statusDraft, name: tag.name,
+                                    count: tag.count, unit: "篇",
+                                    active: state.metaFilter == .tag(tag.name)) {
+                                state.metaFilter = .tag(tag.name)
+                                state.pane = .posts(DocFilter.all)
                             }
-                            .padding(10)
-                            .background(Theme.card)
-                            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMd))
-                            .overlay(RoundedRectangle(cornerRadius: Theme.radiusMd).stroke(Theme.cardBorder, lineWidth: 1))
                         }
                     }
                 }
@@ -135,5 +131,38 @@ struct MetaListView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.bg)
+    }
+}
+
+private struct MetaRow: View {
+    let icon: String
+    let color: Color
+    let name: String
+    let count: Int
+    let unit: String
+    let active: Bool
+    let action: () -> Void
+    @State private var hover = false
+
+    var body: some View {
+        HStack {
+            Image(systemName: icon).foregroundColor(color).font(.system(size: 11))
+            Text(name).font(.system(size: 13)).foregroundColor(Theme.textMain)
+            Spacer()
+            if hover && !active {
+                Text("筛选文章").font(.system(size: 10, weight: .medium)).foregroundColor(Theme.accent)
+            } else {
+                Text("\(count) \(unit)").font(.system(size: 11)).foregroundColor(Theme.textLight)
+            }
+        }
+        .padding(10)
+        .background(active ? Theme.accentBg : (hover ? Theme.surfaceSoft : Theme.card))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusMd))
+        .overlay(RoundedRectangle(cornerRadius: Theme.radiusMd)
+            .stroke(active ? Theme.accent : (hover ? Theme.cardBorder : Theme.cardBorder), lineWidth: 1))
+        .contentShape(Rectangle())
+        .onTapGesture(perform: action)
+        .onHover { hover = $0 }
+        .animation(.easeOut(duration: 0.13), value: hover)
     }
 }

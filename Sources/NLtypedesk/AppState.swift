@@ -8,6 +8,19 @@ enum DocFilter: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// 按分类 / 标签筛选文章列表（点侧栏分类、标签里的行进入）
+enum MetaFilter: Hashable {
+    case category(String)
+    case tag(String)
+
+    var label: String {
+        switch self {
+        case .category(let n): return "分类 · \(n)"
+        case .tag(let n): return "标签 · \(n)"
+        }
+    }
+}
+
 enum Pane: Hashable {
     case notes
     case posts(DocFilter)
@@ -43,6 +56,15 @@ final class AppState: ObservableObject {
     @Published var pane: Pane = .notes
     @Published var newNoteTick = 0
     @Published var newPostTick = 0
+
+    /// ⌘K 全局搜索
+    @Published var searchPresented = false
+    /// 分类 / 标签筛选（nil 表示不筛选）
+    @Published var metaFilter: MetaFilter?
+    /// 搜索结果跳转：由 RootView 消费后清回 nil
+    @Published var openNotePath: String?
+    @Published var openPostCid: Int?
+    @Published var openPageCid: Int?
 
     /// 跟随站点强调色换肤（只读 GET /api/theme 的 accent，不写任何主题配置）
     @AppStorage("theme.followAccent") var followSiteAccent = true

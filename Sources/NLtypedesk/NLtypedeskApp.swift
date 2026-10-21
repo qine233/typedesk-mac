@@ -19,6 +19,9 @@ struct NLtypedeskApp: App {
                     .keyboardShortcut("n", modifiers: .command)
                 Button("新文章") { state.newPostTick += 1 }
                     .keyboardShortcut("n", modifiers: [.command, .shift])
+                Divider()
+                Button("搜索…") { state.searchPresented = true }
+                    .keyboardShortcut("k", modifiers: .command)
             }
             CommandMenu("面板") {
                 Button("本地笔记") { state.pane = .notes }
