@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    name: 编译并出 DMG
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      # Package.swift 是 swift-tools-version 6.0，必须用完整 Xcode 的 Swift 6 工具链
+      - name: 选择工具链
+        run: echo "DEVELOPER_DIR=$(xcode-select -p)" >> "$GITHUB_ENV"
+
+      - name: 编译打包
+        run: |
+          chmod +x Scripts/make_dmg.sh
+          ./Scripts/make_dmg.sh
+          VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' build/NLtypedesk.app/Contents/Info.plist)
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "DMG=build/NLtypedesk-$VERSION.dmg" >> "$GITHUB_ENV"
+
+      - name: 校验 DMG 能挂载、里面有 app
+        run: |
+          set -e
+          hdiutil attach -nobrowse -quiet "$DMG"
+          MNT="/Volumes/NLtypedesk $VERSION"
+          test -x "$MNT/NLtypedesk.app/Contents/MacOS/NLtypedesk"
+          codesign -v "$MNT/NLtypedesk.app"
+          hdiutil detach -quiet "$MNT"
+
+      - name: 用提交说明作为 Release 正文
+        run: |
+          {
+            echo "BODY<<EOF"
+            git log -1 --pretty=%B "$GITHUB_REF_NAME"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+
+      - name: 发布
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: NLtypedesk ${{ env.VERSION }}
+          body: ${{ env.BODY }}
+          prerelease: true
+          files: ${{ env.DMG }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

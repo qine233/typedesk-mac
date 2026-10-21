@@ -30,14 +30,21 @@ macOS 上的 Typecho 写作 / 笔记 / 站点数据客户端，界面风格取�
 不需要 Xcode 工程，SwiftPM 直接构建：
 
 ```sh
-DEVELOPER_DIR=/Library/Developer/CommandLineTools ./Scripts/make_app.sh --open
+DEVELOPER_DIR=/Library/Developer/CommandLineTools ./Scripts/make_app.sh --open   # build/NLtypedesk.app
+DEVELOPER_DIR=/Library/Developer/CommandLineTools ./Scripts/make_dmg.sh          # build/NLtypedesk-<版本>.dmg
 ```
 
-产物在 `build/NLtypedesk.app`（ad-hoc 签名）。
+产物是 ad-hoc 签名的 .app / .dmg（dmg 里带一个 Applications 替身，拖进去即安装）。
 
 > 如果本机装了完整 Xcode 但未同意许可，所有 `swift` / `git` 命令都要带
 > `DEVELOPER_DIR=/Library/Developer/CommandLineTools` 前缀，或执行
 > `sudo xcodebuild -license accept` 一劳永逸。
+
+## 发版
+
+推一个 `v*` tag 就会由 GitHub Actions（`.github/workflows/release.yml`）在 macos runner 上
+重新编译、产出 DMG、建好 Release 并挂上安装包；DMG 挂载后会校验 app 存在且签名可读。
+本地发版用 `./Scripts/gh_release.sh <tag>`，需要 `NLTYPEDESK_GH_TOKEN` 或钥匙串里的 `github.token`。
 
 ## 对接文档
 
