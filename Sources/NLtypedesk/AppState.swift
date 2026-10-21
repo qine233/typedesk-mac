@@ -66,6 +66,17 @@ final class AppState: ObservableObject {
     @Published var openPostCid: Int?
     @Published var openPageCid: Int?
 
+    /// 记账流水下钻筛选（点月度柱或分类条进入）
+    @Published var billMonthFilter: String? {
+        didSet { if oldValue != billMonthFilter { Task { await applyBillFilters() } } }
+    }
+    @Published var billKindFilter: String? {
+        didSet { if oldValue != billKindFilter { Task { await applyBillFilters() } } }
+    }
+    /// 下钻时按条件重新拉全量流水（默认列表只有最近 200 条）
+    @Published var billFilteredRecords: [Bill]?
+    @Published var billFilterLoading = false
+
     /// 跟随站点强调色换肤（只读 GET /api/theme 的 accent，不写任何主题配置）
     @AppStorage("theme.followAccent") var followSiteAccent = true
     var cachedAccent: AccentInfo?
@@ -155,6 +166,46 @@ final class AppState: ObservableObject {
             siteDataError = nil
         } catch {
             siteDataError = error.localizedDescription
+        }
+    }
+
+    var hasBillFilter: Bool { billMonthFilter != nil || billKindFilter != nil }
+
+    /// 分类 key → 中文名（分类名可能自定义，拿不到就原样显示）
+    func billKindLabel(_ kind: String?) -> String {
+        guard let kind else { return "" }
+        return billsData?.kinds?.first { $0.kind == kind }?.label ?? kind
+    }
+
+    /// 下钻筛选：条件为空就回到默认流水，否则按月份 / 分类重新拉全量
+    func applyBillFilters() async {
+        guard hasBillFilter else {
+            billFilteredRecords = nil
+            return
+        }
+        guard let c = noline else {
+            billFilteredRecords = []
+            return
+        }
+        billFilterLoading = true
+        defer { billFilterLoading = false }
+        let range = billMonthFilter.flatMap { NLDate.monthRange($0) }
+        if range == nil && billKindFilter == nil {
+            billFilteredRecords = []
+            return
+        }
+        do {
+            let data = try await c.billsRecords(from: range?.from,
+                                               to: range?.to,
+                                               kind: billKindFilter,
+                                               limit: 0)
+            billFilteredRecords = data.records
+        } catch {
+            billFilteredRecords = billRecords.filter { bill in
+                (range.map { bill.date >= $0.from && bill.date <= $0.to } ?? true)
+                    && (billKindFilter.map { bill.kind == $0 } ?? true)
+            }
+            await reportNolineError(error, isWrite: false)
         }
     }
 

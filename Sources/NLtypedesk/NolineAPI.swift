@@ -408,6 +408,19 @@ enum NLDate {
         guard p.count == 2, let n = Int(p[1]) else { return m }
         return "\(n)月"
     }
+
+    /// "yyyy-MM" → 该月首末日；解析失败返回 nil
+    static func monthRange(_ m: String) -> (from: String, to: String)? {
+        let p = m.split(separator: "-")
+        guard p.count == 2, let y = Int(p[0]), let mo = Int(p[1]), (1...12).contains(mo) else { return nil }
+        var comp = DateComponents()
+        comp.year = y; comp.month = mo; comp.day = 1
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC") ?? .current
+        guard let start = cal.date(from: comp),
+              let end = cal.date(byAdding: DateComponents(month: 1, day: -1), to: start) else { return nil }
+        return (NLDate.string(start), NLDate.string(end))
+    }
 }
 
 enum NLFormat {

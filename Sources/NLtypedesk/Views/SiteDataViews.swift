@@ -565,11 +565,18 @@ struct BillsMiddleListView: View {
         var id: String { date }
     }
 
+    private var source: [Bill] {
+        if state.hasBillFilter { return state.billFilteredRecords ?? [] }
+        return state.billRecords
+    }
+
     private var groups: [DayGroup] {
-        Dictionary(grouping: state.billRecords, by: \.date)
+        Dictionary(grouping: source, by: \.date)
             .map { DayGroup(date: $0.key, amount: $0.value.reduce(0) { $0 + $1.amount }, items: $0.value) }
             .sorted { $0.date > $1.date }
     }
+
+    private var filterAmount: Double { source.reduce(0) { $0 + $1.amount } }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -583,11 +590,20 @@ struct BillsMiddleListView: View {
                     .background(Theme.accent).foregroundColor(.white).clipShape(Capsule())
                 }
             }
+            if state.hasBillFilter { billFilterBar }
             if state.siteKey.isEmpty {
                 EmptyStateView(title: "未配置站点密钥", subtitle: "设置里填入密钥后即可记账")
+            } else if state.billFilterLoading && groups.isEmpty {
+                VStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("正在按筛选条件取流水…").font(.system(size: 11)).foregroundColor(Theme.textLight)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity).background(Theme.bg)
             } else if groups.isEmpty && !state.siteDataLoading {
-                EmptyStateView(title: "还没有流水",
-                               subtitle: "一天可以记好几笔\n每笔都是新增，不会互相覆盖")
+                EmptyStateView(title: state.hasBillFilter ? "这个条件下没有流水" : "还没有流水",
+                               subtitle: state.hasBillFilter
+                                ? "默认只取了最近 200 条，筛选时会重新拉全量\n换个月份或分类试试"
+                                : "一天可以记好几笔\n每笔都是新增，不会互相覆盖")
             } else {
                 ScrollView {
                     LazyVStack(spacing: 10) {
@@ -628,6 +644,52 @@ struct BillsMiddleListView: View {
     private func kindLabel(_ kind: String?) -> String {
         guard let kind else { return "" }
         return state.billsData?.kinds?.first { $0.kind == kind }?.label ?? kind
+    }
+
+    /// 下钻筛选条：月份 / 分类，带本地产物合计，可单项取消
+    private var billFilterBar: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "line.3.horizontal.decrease.circle.fill")
+                .font(.system(size: 11)).foregroundColor(Theme.accent)
+            if let m = state.billMonthFilter {
+                FilterChip(text: NLDate.monthLabel(m) + " · \(m)",
+                           tint: Theme.info) { state.billMonthFilter = nil }
+            }
+            if let k = state.billKindFilter {
+                FilterChip(text: kindLabel(k), tint: Theme.headingMarker) { state.billKindFilter = nil }
+            }
+            Spacer(minLength: 6)
+            Text("\(source.count) 笔 · ¥" + NLFormat.money(filterAmount))
+                .font(.system(size: 10, weight: .medium)).foregroundColor(Theme.textSecondary)
+            Button("全部清除") {
+                state.billMonthFilter = nil
+                state.billKindFilter = nil
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 10, weight: .medium)).foregroundColor(Theme.textLight)
+        }
+        .padding(.horizontal, 10).padding(.vertical, 7)
+        .background(Theme.accentBg)
+        .overlay(Rectangle().frame(height: 1).foregroundColor(Theme.accent.opacity(0.25)), alignment: .bottom)
+    }
+}
+
+private struct FilterChip: View {
+    let text: String
+    let tint: Color
+    let clear: () -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(text).font(.system(size: 10, weight: .medium)).foregroundColor(tint)
+            Button(action: clear) {
+                Image(systemName: "xmark.circle.fill").font(.system(size: 10)).foregroundColor(tint.opacity(0.6))
+            }.buttonStyle(.plain)
+        }
+        .padding(.horizontal, 7).padding(.vertical, 3)
+        .background(Color.white.opacity(0.5))
+        .overlay(Capsule().stroke(tint.opacity(0.35), lineWidth: 1))
+        .clipShape(Capsule())
     }
 }
 
@@ -870,10 +932,12 @@ struct BillsDetailView: View {
                 }
 
                 SectionCard("近 7 个月", subtitle: "含本月，没记的月份也是 0") {
-                    MonthBars(months: b.months ?? [])
+                    MonthBars(months: b.months ?? [], selected: state.billMonthFilter) { m in
+                        state.billMonthFilter = m
+                    }
                 }
 
-                SectionCard("本月花在哪", subtitle: (b.kinds_month ?? []).isEmpty ? nil : "按金额排序") {
+                SectionCard("本月花在哪", subtitle: (b.kinds_month ?? []).isEmpty ? nil : "按金额排序，点一行看该分类") {
                     if (b.kinds_month ?? []).isEmpty {
                         Text("本月还没开销").font(.system(size: 12)).foregroundColor(Theme.textLight)
                     } else {
@@ -950,9 +1014,24 @@ struct BillsDetailView: View {
     }
 
     private func kindRow(_ share: BillKindShare, kinds: [BillKind]) -> some View {
+        KindShareRow(share: share, kinds: kinds, active: state.billKindFilter == share.kind) {
+            state.billKindFilter = state.billKindFilter == share.kind ? nil : share.kind
+        }
+    }
+}
+
+private struct KindShareRow: View {
+    let share: BillKindShare
+    let kinds: [BillKind]
+    let active: Bool
+    let tap: () -> Void
+    @State private var hover = false
+
+    var body: some View {
         let label = kinds.first { $0.kind == share.kind }?.label ?? share.kind
         return HStack(spacing: 10) {
-            Text(label).font(.system(size: 12)).foregroundColor(Theme.textMain)
+            Text(label).font(.system(size: 12, weight: active ? .semibold : .regular))
+                .foregroundColor(active ? Theme.accent : Theme.textMain)
                 .frame(width: 64, alignment: .leading)
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
@@ -969,6 +1048,14 @@ struct BillsDetailView: View {
             Text(String(format: "%.0f%%", (share.share ?? 0) * 100))
                 .font(.system(size: 10)).foregroundColor(Theme.textLight).frame(width: 34, alignment: .trailing)
         }
+        .padding(.horizontal, 6).padding(.vertical, 3)
+        .background(active ? Theme.accentBg : (hover ? Theme.surfaceSoft : Color.clear))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .contentShape(Rectangle())
+        .onTapGesture(perform: tap)
+        .onHover { hover = $0 }
+        .animation(.easeOut(duration: 0.13), value: hover)
+        .help("只看「\(label)」的流水")
     }
 }
 
@@ -976,29 +1063,64 @@ struct BillsDetailView: View {
 
 struct MonthBars: View {
     let months: [BillMonth]
+    var selected: String?
+    var onSelect: ((String?) -> Void)?
 
     var body: some View {
         let maxAmount = max(months.map(\.amount).max() ?? 1, 0.01)
         return VStack(spacing: 0) {
             HStack(alignment: .bottom, spacing: 12) {
                 ForEach(months) { m in
-                    VStack(spacing: 5) {
-                        Text(m.amount > 0 ? NLFormat.money(m.amount) : "0")
-                            .font(.system(size: 9, weight: .medium, design: .rounded))
-                            .foregroundColor(m.amount > 0 ? Theme.textMain : Theme.textLight.opacity(0.5))
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(m.amount > 0
-                                  ? AnyShapeStyle(LinearGradient(colors: [Theme.accent, Theme.accent.opacity(0.55)],
-                                                                 startPoint: .top, endPoint: .bottom))
-                                  : AnyShapeStyle(Theme.surfaceSunken))
-                            .frame(width: 22, height: max(3, 84 * CGFloat(m.amount / maxAmount)))
-                        Text(NLDate.monthLabel(m.month))
-                            .font(.system(size: 10)).foregroundColor(Theme.textLight)
+                    MonthBar(month: m, amount: m.amount, maxAmount: maxAmount,
+                             active: selected == m.month) {
+                        onSelect?(selected == m.month ? nil : m.month)
                     }
                     .frame(maxWidth: .infinity)
                 }
             }
             .frame(height: 126, alignment: .bottom)
+            if onSelect != nil {
+                Text("点柱子看那个月的流水")
+                    .font(.system(size: 9)).foregroundColor(Theme.textLight)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 6)
+            }
         }
+    }
+}
+
+private struct MonthBar: View {
+    let month: BillMonth
+    let amount: Double
+    let maxAmount: Double
+    let active: Bool
+    let tap: () -> Void
+    @State private var hover = false
+
+    var body: some View {
+        VStack(spacing: 5) {
+            Text(amount > 0 ? NLFormat.money(amount) : "0")
+                .font(.system(size: 9, weight: .medium, design: .rounded))
+                .foregroundColor(amount > 0 ? Theme.textMain : Theme.textLight.opacity(0.5))
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .fill(amount > 0
+                      ? AnyShapeStyle(LinearGradient(colors: [Theme.accent, Theme.accent.opacity(0.55)],
+                                                     startPoint: .top, endPoint: .bottom))
+                      : AnyShapeStyle(Theme.surfaceSunken))
+                .frame(width: 22, height: max(3, 84 * CGFloat(amount / maxAmount)))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .stroke(active ? Theme.accent : Color.clear, lineWidth: 1.5)
+                )
+            Text(NLDate.monthLabel(month.month))
+                .font(.system(size: 10, weight: active ? .bold : .regular))
+                .foregroundColor(active ? Theme.accent : (hover ? Theme.textMain : Theme.textLight))
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: tap)
+        .onHover { hover = $0 }
+        .animation(.easeOut(duration: 0.13), value: hover)
+        .animation(.easeOut(duration: 0.15), value: active)
+        .help("看 \(month.month) 的流水")
     }
 }

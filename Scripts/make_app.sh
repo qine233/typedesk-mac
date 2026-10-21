@@ -21,8 +21,8 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
     <key>CFBundleDisplayName</key><string>NLtypedesk</string>
     <key>CFBundleIdentifier</key><string>work.zhouzhou.inkdesk</string>
     <key>CFBundleExecutable</key><string>NLtypedesk</string>
-    <key>CFBundleVersion</key><string>0.5.0</string>
-    <key>CFBundleShortVersionString</key><string>0.5.0</string>
+    <key>CFBundleVersion</key><string>0.6.0</string>
+    <key>CFBundleShortVersionString</key><string>0.6.0</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>NSHighResolutionCapable</key><true/>

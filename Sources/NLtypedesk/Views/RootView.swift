@@ -70,6 +70,10 @@ struct RootView: View {
         .onChange(of: state.newPostTick) { _ in startNewPost() }
         .onChange(of: state.pane) { p in
             if case .posts = p {} else { state.metaFilter = nil }
+            if p != .bills {
+                state.billMonthFilter = nil
+                state.billKindFilter = nil
+            }
         }
         .onChange(of: state.openNotePath) { path in
             guard let path else { return }
@@ -425,7 +429,8 @@ struct SidebarSearchField: View {
     }
 }
 
-struct PaneHeader: View {    let title: String
+struct PaneHeader: View {
+    let title: String
     var trailing: AnyView?
     init(_ title: String, @ViewBuilder trailing: () -> some View = { EmptyView() }) {
         self.title = title

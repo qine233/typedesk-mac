@@ -45,33 +45,47 @@ struct SearchHit: Identifiable, Equatable {
 
 enum SearchEngine {
     /// 在笔记、文章、页面里做不区分大小写的全文搜索，每组最多 8 条，按时间倒序
-    static func run(query raw: String, notes: [Note], posts: [TSPost], pages: [TSPage]) -> [SearchHit] {
+    static func run(query raw: String, notes: [Note], posts: [TSPost], pages: [TSPage],
+                    kinds: Set<SearchHit.Kind> = Set(SearchHit.Kind.allCasesOrdered),
+                    metaFilter: MetaFilter? = nil) -> [SearchHit] {
         let q = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard q.count >= 1 else { return [] }
         var hits: [SearchHit] = []
 
-        for n in notes {
-            guard let m = match(title: n.title, body: n.text, q: q) else { continue }
-            hits.append(SearchHit(id: "note-\(n.path)", kind: .note,
-                                  title: n.title.isEmpty ? "未命名笔记" : n.title,
-                                  snippet: m.snippet,
-                                  detail: relative(n.updated), date: n.updated))
+        if kinds.contains(.note) {
+            for n in notes {
+                guard let m = match(title: n.title, body: n.text, q: q) else { continue }
+                hits.append(SearchHit(id: "note-\(n.path)", kind: .note,
+                                      title: n.title.isEmpty ? "未命名笔记" : n.title,
+                                      snippet: m.snippet,
+                                      detail: relative(n.updated), date: n.updated))
+            }
         }
-        for p in posts {
-            guard let m = match(title: p.title, body: p.content, q: q) else { continue }
-            let extra = ([p.categories, p.tags].flatMap { $0 }.prefix(2)).joined(separator: " · ")
-            hits.append(SearchHit(id: "post-\(p.cid)", kind: .post,
-                                  title: p.title.isEmpty ? "未命名" : p.title,
-                                  snippet: m.snippet,
-                                  detail: "\(p.status == TSStatus.published ? "已发布" : "草稿")"
-                                    + (extra.isEmpty ? "" : " · \(extra)"),
-                                  date: p.modified))
+        if kinds.contains(.post) {
+            let scoped: [TSPost]
+            switch metaFilter {
+            case .category(let name): scoped = posts.filter { $0.categories.contains(name) }
+            case .tag(let name): scoped = posts.filter { $0.tags.contains(name) }
+            case nil: scoped = posts
+            }
+            for p in scoped {
+                guard let m = match(title: p.title, body: p.content, q: q) else { continue }
+                let extra = ([p.categories, p.tags].flatMap { $0 }.prefix(2)).joined(separator: " · ")
+                hits.append(SearchHit(id: "post-\(p.cid)", kind: .post,
+                                      title: p.title.isEmpty ? "未命名" : p.title,
+                                      snippet: m.snippet,
+                                      detail: "\(p.status == TSStatus.published ? "已发布" : "草稿")"
+                                        + (extra.isEmpty ? "" : " · \(extra)"),
+                                      date: p.modified))
+            }
         }
-        for p in pages {
-            guard let m = match(title: p.title, body: p.content, q: q) else { continue }
-            hits.append(SearchHit(id: "page-\(p.cid)", kind: .page,
-                                  title: p.title.isEmpty ? "未命名页面" : p.title,
-                                  snippet: m.snippet, detail: relative(p.created), date: p.created))
+        if kinds.contains(.page) {
+            for p in pages {
+                guard let m = match(title: p.title, body: p.content, q: q) else { continue }
+                hits.append(SearchHit(id: "page-\(p.cid)", kind: .page,
+                                      title: p.title.isEmpty ? "未命名页面" : p.title,
+                                      snippet: m.snippet, detail: relative(p.created), date: p.created))
+            }
         }
 
         let grouped = Dictionary(grouping: hits, by: { $0.kind })
@@ -146,11 +160,14 @@ struct SearchPalette: View {
 
     @State private var query = ""
     @State private var results: [SearchHit] = []
+    @State private var kindsOn: Set<SearchHit.Kind> = Set(SearchHit.Kind.allCasesOrdered)
+    @State private var respectMetaFilter = false
     @FocusState private var inputFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
             searchBar
+            filterBar
             Divider().overlay(Theme.borderSoft)
             content
             footer
@@ -170,10 +187,7 @@ struct SearchPalette: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: 15))
                 .focused($inputFocused)
-                .onChange(of: query) { q in
-                    results = SearchEngine.run(query: q, notes: notes.notes,
-                                               posts: state.posts, pages: state.pages)
-                }
+                .onChange(of: query) { _ in recompute() }
                 .onSubmit {
                     let list = query.trimmingCharacters(in: .whitespaces).isEmpty
                         ? (recents.first?.items ?? []) : results
@@ -185,7 +199,66 @@ struct SearchPalette: View {
                 }.buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 16).padding(.vertical, 14)
+        .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 8)
+    }
+
+    private func recompute() {
+        results = SearchEngine.run(query: query, notes: notes.notes,
+                                   posts: state.posts, pages: state.pages,
+                                   kinds: kindsOn,
+                                   metaFilter: respectMetaFilter ? state.metaFilter : nil)
+    }
+
+    /// 类型开关 + 是否沿用当前的分类/标签筛选
+    private var filterBar: some View {
+        HStack(spacing: 8) {
+            ForEach(SearchHit.Kind.allCasesOrdered, id: \.self) { kind in
+                let on = kindsOn.contains(kind)
+                Button {
+                    if on {
+                        if kindsOn.count > 1 { kindsOn.remove(kind) }
+                    } else {
+                        kindsOn.insert(kind)
+                    }
+                    recompute()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: kind.icon).font(.system(size: 9, weight: .bold))
+                        Text(kind.sectionTitle).font(.system(size: 11, weight: .medium))
+                    }
+                    .foregroundColor(on ? Theme.accent : Theme.textLight)
+                    .padding(.horizontal, 9).padding(.vertical, 4)
+                    .background(on ? Theme.accentBg : Color.clear)
+                    .overlay(Capsule().stroke(on ? Theme.accent.opacity(0.45) : Theme.cardBorder, lineWidth: 1))
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer()
+            if state.metaFilter != nil {
+                Button {
+                    respectMetaFilter.toggle()
+                    recompute()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: respectMetaFilter ? "line.3.horizontal.decrease.circle.fill"
+                                                           : "line.3.horizontal.decrease.circle")
+                            .font(.system(size: 10))
+                        Text(state.metaFilter?.label ?? "")
+                            .font(.system(size: 10, weight: .medium)).lineLimit(1)
+                    }
+                    .foregroundColor(respectMetaFilter ? Theme.accent : Theme.textLight)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(respectMetaFilter ? Theme.accentBg : Color.clear)
+                    .overlay(Capsule().stroke(respectMetaFilter ? Theme.accent.opacity(0.45) : Theme.cardBorder,
+                                             lineWidth: 1))
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .help("只搜当前分类/标签下的文章")
+            }
+        }
+        .padding(.horizontal, 16).padding(.bottom, 10)
     }
 
     private var grouped: [(kind: SearchHit.Kind, items: [SearchHit])] {
