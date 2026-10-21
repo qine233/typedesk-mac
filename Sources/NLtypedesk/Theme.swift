@@ -19,15 +19,49 @@ private func dyn(_ light: String, _ dark: String, lightA: Double = 1, darkA: Dou
     })
 }
 
+private func mixHex(_ hex: String, _ target: String, _ t: Double) -> String {
+    let (r1, g1, b1) = hexRGB(hex)
+    let (r2, g2, b2) = hexRGB(target)
+    let m = max(0, min(1, t))
+    let r = Int((r1 + (r2 - r1) * m) * 255.0)
+    let g = Int((g1 + (g2 - g1) * m) * 255.0)
+    let b = Int((b1 + (b2 - b1) * m) * 255.0)
+    return String(format: "#%02x%02x%02x", r, g, b)
+}
+
 /// 令牌取自 noline design.min.css（light :root / [data-theme=dark]）
 enum Theme {
-    // 品牌
-    static let accent = dyn("#425aef", "#8a9bff")
-    static let accentHover = dyn("#3549c9", "#a3b2ff")
-    static let accentBg = dyn("#425aef", "#8a9bff", lightA: 0.10, darkA: 0.18)
-    static let accentRing = dyn("#425aef", "#8a9bff", lightA: 0.35, darkA: 0.45)
+    // 品牌色：可被站点 GET /api/theme 的 accent 覆盖（跟随博客换肤）
+    private static let defaultAccentLight = "#425aef"
+    private static let defaultAccentDark = "#8a9bff"
+    nonisolated(unsafe) private static var accentLight = defaultAccentLight
+    nonisolated(unsafe) private static var accentDark = defaultAccentDark
+
+    static var accent: Color { dyn(accentLight, accentDark) }
+    static var accentHover: Color { dyn(mixHex(accentLight, "#000000", 0.14), mixHex(accentDark, "#ffffff", 0.16)) }
+    static var accentBg: Color { dyn(accentLight, accentDark, lightA: 0.10, darkA: 0.18) }
+    static var accentRing: Color { dyn(accentLight, accentDark, lightA: 0.35, darkA: 0.45) }
     /// 标题标记暖黄，用于点缀
     static let headingMarker = dyn("#f2ba4b", "#e8c476")
+
+    /// 应用站点强调色；hex 可省 `#`，非法值忽略
+    static func applySiteAccent(light: String, dark: String?) {
+        func norm(_ s: String) -> String? {
+            var v = s.trimmingCharacters(in: .whitespaces).lowercased()
+            if v.hasPrefix("#") { v.removeFirst() }
+            if v.count == 3 { v = v.map { "\($0)\($0)" }.joined() }
+            guard v.count == 6, v.allSatisfy({ $0.isHexDigit }) else { return nil }
+            return "#" + v
+        }
+        guard let l = norm(light) else { return }
+        accentLight = l
+        accentDark = norm(dark ?? light) ?? mixHex(l, "#ffffff", 0.45)
+    }
+
+    static func clearSiteAccent() {
+        accentLight = defaultAccentLight
+        accentDark = defaultAccentDark
+    }
 
     // 表面
     static let bg = dyn("#f7f9fe", "#17191d")

@@ -57,12 +57,26 @@ struct PostRow: View {
 struct NoteRow: View {
     let note: Note
     var active = false
+    var syncedCid = 0
     @State private var hover = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(note.title).font(.system(size: 13, weight: .medium))
-                .foregroundColor(Theme.textStrong).lineLimit(1)
+            HStack(spacing: 6) {
+                Text(note.title).font(.system(size: 13, weight: .medium))
+                    .foregroundColor(Theme.textStrong).lineLimit(1)
+                if syncedCid > 0 {
+                    HStack(spacing: 2) {
+                        Image(systemName: "icloud").font(.system(size: 8))
+                        Text("草稿").font(.system(size: 9, weight: .medium))
+                    }
+                    .foregroundColor(Theme.info)
+                    .padding(.horizontal, 5).padding(.vertical, 1)
+                    .background(Theme.info.opacity(0.12))
+                    .clipShape(Capsule())
+                }
+                Spacer(minLength: 4)
+            }
             HStack {
                 Text(note.text.split(separator: "\n").dropFirst().joined(separator: " ")
                     .replacingOccurrences(of: "#", with: "")

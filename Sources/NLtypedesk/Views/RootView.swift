@@ -41,7 +41,6 @@ struct SidebarRow: View {
 struct RootView: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var notes: NoteStore
-    @State private var pane: Pane = .notes
     @State private var selectedNote: Note?
     @State private var editingPost: TSPost?
     @State private var editingPage: TSPage?
@@ -59,6 +58,20 @@ struct RootView: View {
         .navigationSplitViewStyle(.balanced)
         .sheet(isPresented: $showSettings) { SettingsView() }
         .task { if !state.connected { await state.refresh() } }
+        .onChange(of: state.newNoteTick) { _ in
+            selectedNote = notes.create()
+            editingPost = nil
+            editingPage = nil
+        }
+        .onChange(of: state.newPostTick) { _ in startNewPost() }
+    }
+
+    private func startNewPost() {
+        selectedNote = nil
+        editingPage = nil
+        editingPost = TSPost(cid: 0, title: "", content: "", categories: [], tags: [],
+                             slug: "", status: TSStatus.draft, created: Date(), modified: Date(),
+                             link: "", allowComment: true)
     }
 
     // MARK: 侧栏
@@ -81,7 +94,7 @@ struct RootView: View {
             }
             .padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 10)
 
-            List(selection: $pane) {
+            List(selection: $state.pane) {
                 Section("写作") {
                     SidebarRow("note.text", Theme.headingMarker, "本地笔记", count: notes.notes.count)
                         .tag(Pane.notes)
@@ -139,7 +152,7 @@ struct RootView: View {
 
     @ViewBuilder
     private var middle: some View {
-        switch pane {
+        switch state.pane {
         case .notes:
             notesList
         case .posts(let f):
@@ -170,7 +183,8 @@ struct RootView: View {
                 ScrollView {
                     LazyVStack(spacing: 6) {
                         ForEach(notes.notes) { note in
-                            NoteRow(note: note, active: selectedNote?.path == note.path)
+                            NoteRow(note: note, active: selectedNote?.path == note.path,
+                                    syncedCid: notes.remoteCid(for: note.path))
                                 .onTapGesture { selectedNote = note }
                                 .contextMenu {
                                     Button("删除", role: .destructive) {
@@ -190,13 +204,7 @@ struct RootView: View {
     private func postsList(_ f: DocFilter) -> some View {
         VStack(spacing: 0) {
             PaneHeader("网站文章") {
-                Button {
-                    selectedNote = nil
-                    editingPage = nil
-                    editingPost = TSPost(cid: 0, title: "", content: "", categories: [], tags: [],
-                                         slug: "", status: TSStatus.draft, created: Date(), modified: Date(),
-                                         link: "", allowComment: true)
-                } label: { paneButton("新文章", "square.and.pencil") }
+                Button { startNewPost() } label: { paneButton("新文章", "square.and.pencil") }
             }
             Picker("", selection: $filter) {
                 ForEach(DocFilter.allCases) { Text($0.rawValue).tag($0) }
@@ -293,9 +301,9 @@ struct RootView: View {
                     .id("note-\(note.path)")
                     .environmentObject(state)
                     .environmentObject(notes)
-            } else if pane == .health {
+            } else if state.pane == .health {
                 HealthDetailView().environmentObject(state)
-            } else if pane == .bills {
+            } else if state.pane == .bills {
                 BillsDetailView().environmentObject(state)
             } else {
                 placeholder
@@ -309,7 +317,7 @@ struct RootView: View {
             EmptyInkIllustration()
             Text("从左侧选择内容开始写作")
                 .font(.system(size: 14, weight: .medium)).foregroundColor(Theme.textMain)
-            Text("新文章 ⌘⇧N · 新笔记 ⌘N · 预览 ⇧⌘P")
+            Text("面板 ⌘1–8 · 新笔记 ⌘N · 新文章 ⌘⇧N · 保存 ⌘S")
                 .font(.system(size: 11)).foregroundColor(Theme.textLight)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

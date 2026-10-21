@@ -89,6 +89,15 @@ struct SettingsView: View {
             }
             .padding(.top, 14)
 
+            Toggle(isOn: $state.followSiteAccent) {
+                Text("跟随站点强调色换肤（只读，不改站点设置）").font(.system(size: 12)).foregroundColor(Theme.textSecondary)
+            }
+            .toggleStyle(.switch)
+            .padding(.top, 4)
+            .onChange(of: state.followSiteAccent) { _ in
+                state.applyFollowAccent()
+            }
+
             if let err = state.lastError, testOK == false {
                 Text(err).font(.system(size: 11)).foregroundColor(Theme.statusDraft).padding(.top, 6)
             }

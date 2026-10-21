@@ -39,6 +39,15 @@ final class AppState: ObservableObject {
     @Published var loading = false
     @Published var lastError: String?
 
+    /// 当前面板提到 AppState，让菜单栏快捷键可以切换
+    @Published var pane: Pane = .notes
+    @Published var newNoteTick = 0
+    @Published var newPostTick = 0
+
+    /// 跟随站点强调色换肤（只读 GET /api/theme 的 accent，不写任何主题配置）
+    @AppStorage("theme.followAccent") var followSiteAccent = true
+    var cachedAccent: AccentInfo?
+
     // 站点数据（健康 / 记账）
     @Published var healthData: HealthData?
     @Published var billsData: BillsData?
@@ -87,6 +96,22 @@ final class AppState: ObservableObject {
             lastError = error.localizedDescription
         }
         await refreshSiteData()
+        await fetchThemeAccent()
+    }
+
+    func fetchThemeAccent() async {
+        guard let c = noline else { return }
+        cachedAccent = (try? await c.theme())?.accent
+        applyFollowAccent()
+    }
+
+    func applyFollowAccent() {
+        if followSiteAccent, let a = cachedAccent, let hex = a.hex, !hex.isEmpty {
+            Theme.applySiteAccent(light: hex, dark: a.dark)
+        } else {
+            Theme.clearSiteAccent()
+        }
+        objectWillChange.send()
     }
 
     // MARK: 站点数据

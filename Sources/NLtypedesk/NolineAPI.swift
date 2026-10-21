@@ -159,6 +159,17 @@ struct BillsData: Codable {
 struct BillsRecordsData: Codable { let total: Int?; let amount: Double?; let records: [Bill] }
 struct BillsPostResponse: Codable { let saved: Int; let total: Int?; let ids: [String]?; let invalid: [String]? }
 
+struct AccentInfo: Codable {
+    let hex: String?
+    let rgb: String?
+    let luminance: Double?
+    let on: String?
+    let dark: String?
+}
+
+/// GET /api/theme：App 只用 accent（跟随博客换肤），不读写 14 项配置本身
+struct ThemeData: Codable { let accent: AccentInfo? }
+
 // MARK: - 客户端
 
 final class NolineClient {
@@ -294,6 +305,10 @@ final class NolineClient {
 
     func health() async throws -> HealthData {
         try await request("GET", path: "health")
+    }
+
+    func theme() async throws -> ThemeData {
+        try await request("GET", path: "theme")
     }
 
     func healthRecords(from: String? = nil, to: String? = nil, limit: Int? = nil) async throws -> HealthRecordsData {

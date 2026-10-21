@@ -54,6 +54,29 @@ private struct SectionCard<Content: View>: View {
 
 private func moneyColor(_ v: Double) -> Color { v > 0 ? Theme.danger : v < 0 ? Theme.statusPublish : Theme.textLight }
 
+private struct InlineActionButton: View {
+    let title: String
+    let icon: String
+    let action: () -> Void
+    @State private var hover = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: icon).font(.system(size: 10, weight: .bold))
+                Text(title).font(.system(size: 11, weight: .medium))
+            }
+            .padding(.horizontal, 11).padding(.vertical, 5)
+            .background(hover ? Theme.accentHover : Theme.accent)
+            .foregroundColor(.white)
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+        .animation(.easeOut(duration: 0.15), value: hover)
+    }
+}
+
 private struct KeyMissing: View {
     var body: some View {
         VStack(spacing: 0) {
@@ -294,6 +317,7 @@ struct HealthEditSheet: View {
 
 struct HealthDetailView: View {
     @EnvironmentObject var state: AppState
+    @State private var showEditor = false
 
     var body: some View {
         Group {
@@ -318,6 +342,7 @@ struct HealthDetailView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .sheet(isPresented: $showEditor) { HealthEditSheet(existing: nil) }
     }
 
     private func content(_ h: HealthData) -> some View {
@@ -325,6 +350,11 @@ struct HealthDetailView: View {
         let series = h.series ?? []
         return ScrollView {
             VStack(spacing: 12) {
+                HStack {
+                    InlineActionButton(title: "记体重", icon: "plus") { showEditor = true }
+                    Spacer()
+                    Text("\(h.count ?? 0) 条记录").font(.system(size: 11)).foregroundColor(Theme.textLight)
+                }
                 HStack(spacing: 12) {
                     StatCard("当前体重") {
                         VStack(alignment: .leading, spacing: 2) {
@@ -794,6 +824,7 @@ struct BillEditSheet: View {
 
 struct BillsDetailView: View {
     @EnvironmentObject var state: AppState
+    @State private var showEditor = false
 
     var body: some View {
         Group {
@@ -818,11 +849,18 @@ struct BillsDetailView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .sheet(isPresented: $showEditor) { BillEditSheet(existing: nil) }
     }
 
     private func content(_ b: BillsData) -> some View {
         ScrollView {
             VStack(spacing: 12) {
+                HStack {
+                    InlineActionButton(title: "记一笔", icon: "plus") { showEditor = true }
+                    Spacer()
+                    Text("\(b.count ?? 0) 笔 · 共 ¥" + NLFormat.money(b.totals?.amount ?? 0))
+                        .font(.system(size: 11)).foregroundColor(Theme.textLight)
+                }
                 HStack(spacing: 12) {
                     periodCard("本周", now: b.week, prev: b.prev_week,
                                context: b.span.map { "第 \($0.weekday ?? 0)/7 天" } ?? "")
